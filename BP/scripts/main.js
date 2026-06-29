@@ -1,23 +1,22 @@
 import { system, world } from "@minecraft/server";
 
 const BACKPACK_TYPE = "bp:wand";
-const DISMISS_TYPE = "bp:dismiss";
 const BACKPACK_ID_PROPERTY = "mcbackpack:id";
 const BACKPACK_ENTITY = "mcbackpack:backpack_container";
 const BACKPACK_TAG_PREFIX = "mcbackpack_id_";
 const BACKPACK_PAGE_TAG_PREFIX = "mcbackpack_page_";
+const BACKPACK_OPEN_TAG = "mcbackpack_open";
+const BACKPACK_DISMISSED_TAG = "mcbackpack_dismissed";
 const HIDDEN_Y = -60;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   if (itemStack?.typeId === BACKPACK_TYPE) {
-    system.run(() => openBackpackContainer(source));
-  } else if (itemStack?.typeId === DISMISS_TYPE) {
-    system.run(() => dismissNearbyContainers(source));
+    system.run(() => toggleBackpackContainer(source));
   }
 });
 
-function openBackpackContainer(player) {
+function toggleBackpackContainer(player) {
   if (!isEntityUsable(player)) return;
 
   const held = getHeldBackpack(player);
@@ -28,54 +27,30 @@ function openBackpackContainer(player) {
 
   const backpackId = ensureBackpackId(player, held.item, held.slot);
   const page = player.isSneaking ? 2 : 1;
-  const backpackEntity = findOrCreateBackpackEntity(player, backpackId, page);
+  const tag = getPageTag(backpackId, page);
+  const existingEntity = findBackpackEntity(tag);
+
+  if (existingEntity && isBackpackPresent(existingEntity, player)) {
+    if (dismissBackpackEntity(existingEntity, player)) {
+      player.sendMessage(`Storage Chest Page ${page} dismissed.`);
+    } else {
+      player.sendMessage("Could not dismiss the backpack container here.");
+    }
+    return;
+  }
+
+  const backpackEntity = existingEntity ?? createBackpackEntity(player, backpackId, page);
   if (!backpackEntity) {
     player.sendMessage("Could not open the backpack container here.");
     return;
   }
 
   moveEntityNearPlayer(backpackEntity, player);
+  backpackEntity.addTag(BACKPACK_OPEN_TAG);
+  backpackEntity.removeTag(BACKPACK_DISMISSED_TAG);
   backpackEntity.nameTag = `Storage Chest Page ${page}`;
   updateBackpackLore(player, backpackId);
   player.sendMessage(`Storage Chest Page ${page} summoned. Tap it to use those 27 slots.`);
-}
-
-function dismissNearbyContainers(player) {
-  if (!isEntityUsable(player)) return;
-
-  const nearbyContainers = player.dimension.getEntities({
-    tags: ["mcbackpack_container"],
-    location: player.location,
-    maxDistance: 16,
-  });
-
-  if (nearbyContainers.length === 0) {
-    player.sendMessage("No storage chests nearby to dismiss.");
-    return;
-  }
-
-  let moved = 0;
-  for (const entity of nearbyContainers) {
-    try {
-      entity.teleport(getHiddenLocation(player), {
-        dimension: player.dimension,
-        checkForBlocks: false,
-      });
-      moved++;
-    } catch {
-      try {
-        entity.teleport(getHighHiddenLocation(player), {
-          dimension: player.dimension,
-          checkForBlocks: false,
-        });
-        moved++;
-      } catch {
-        // Leave any container we cannot move exactly where it is.
-      }
-    }
-  }
-
-  player.sendMessage(`Dismissed ${moved} storage chest${moved === 1 ? "" : "s"}.`);
 }
 
 function getHeldBackpack(player) {
@@ -97,17 +72,14 @@ function ensureBackpackId(player, item, slot) {
   item.setDynamicProperty(BACKPACK_ID_PROPERTY, id);
   item.setLore([
     "Summons storage chests.",
-    "Use: page 1. Sneak-use: page 2.",
+    "Use: toggle page 1. Sneak-use: toggle page 2.",
   ]);
   getInventory(player)?.setItem(slot, item);
   return id;
 }
 
-function findOrCreateBackpackEntity(player, backpackId, page) {
+function createBackpackEntity(player, backpackId, page) {
   const tag = getPageTag(backpackId, page);
-  const existing = findBackpackEntity(tag);
-  if (existing) return existing;
-
   try {
     const entity = player.dimension.spawnEntity(BACKPACK_ENTITY, getOpenLocation(player));
     entity.addTag("mcbackpack_container");
@@ -118,6 +90,43 @@ function findOrCreateBackpackEntity(player, backpackId, page) {
   } catch (error) {
     console.warn(`Failed to create backpack container: ${error}`);
     return undefined;
+  }
+}
+
+function isBackpackPresent(entity, player) {
+  if (!isEntityUsable(entity)) return false;
+  if (entity.hasTag(BACKPACK_DISMISSED_TAG)) return false;
+  if (entity.hasTag(BACKPACK_OPEN_TAG)) return true;
+  if (isHiddenLocation(entity.location)) return false;
+
+  try {
+    return entity.dimension.id === player.dimension.id;
+  } catch {
+    return true;
+  }
+}
+
+function dismissBackpackEntity(entity, player) {
+  try {
+    entity.teleport(getHiddenLocation(player), {
+      dimension: player.dimension,
+      checkForBlocks: false,
+    });
+    entity.removeTag(BACKPACK_OPEN_TAG);
+    entity.addTag(BACKPACK_DISMISSED_TAG);
+    return true;
+  } catch {
+    try {
+      entity.teleport(getHighHiddenLocation(player), {
+        dimension: player.dimension,
+        checkForBlocks: false,
+      });
+      entity.removeTag(BACKPACK_OPEN_TAG);
+      entity.addTag(BACKPACK_DISMISSED_TAG);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -180,6 +189,10 @@ function getHighHiddenLocation(player) {
   };
 }
 
+function isHiddenLocation(location) {
+  return location.y <= HIDDEN_Y + 1;
+}
+
 function getViewDirection(player) {
   try {
     return player.getViewDirection();
@@ -195,7 +208,7 @@ function updateBackpackLore(player, backpackId) {
   held.item.setLore([
     "Summons storage chests.",
     `ID: ${backpackId.slice(-6).toUpperCase()}`,
-    "Use: page 1. Sneak-use: page 2.",
+    "Use: toggle page 1. Sneak-use: toggle page 2.",
   ]);
   held.container.setItem(held.slot, held.item);
 }

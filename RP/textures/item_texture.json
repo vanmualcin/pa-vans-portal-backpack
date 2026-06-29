@@ -7,9 +7,6 @@
     },
     "storage_wand": {
       "textures": "textures/items/storage_wand"
-    },
-    "dismiss_wand": {
-      "textures": "textures/items/dismiss_wand"
     }
   }
 }
