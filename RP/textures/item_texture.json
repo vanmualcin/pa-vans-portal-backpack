@@ -1,0 +1,15 @@
+{
+  "resource_pack_name": "Infinite Backpack Resources",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "infinite_backpack": {
+      "textures": "textures/items/infinite_backpack"
+    },
+    "storage_wand": {
+      "textures": "textures/items/storage_wand"
+    },
+    "dismiss_wand": {
+      "textures": "textures/items/dismiss_wand"
+    }
+  }
+}

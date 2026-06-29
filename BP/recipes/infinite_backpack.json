@@ -1,0 +1,42 @@
+{
+  "format_version": "1.20.10",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "bp:wand"
+    },
+    "tags": [
+      "crafting_table"
+    ],
+    "unlock": [
+      {
+        "item": "minecraft:lapis_lazuli"
+      },
+      {
+        "item": "minecraft:redstone"
+      },
+      {
+        "item": "minecraft:stick"
+      }
+    ],
+    "pattern": [
+      " L ",
+      " R ",
+      " S "
+    ],
+    "key": {
+      "L": {
+        "item": "minecraft:lapis_lazuli"
+      },
+      "R": {
+        "item": "minecraft:redstone"
+      },
+      "S": {
+        "item": "minecraft:stick"
+      }
+    },
+    "result": {
+      "item": "bp:wand",
+      "count": 1
+    }
+  }
+}

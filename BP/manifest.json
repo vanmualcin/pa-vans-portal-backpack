@@ -1,0 +1,38 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Pa Van's Portal Backpack Behavior",
+    "description": "Version 1.0.0. Adds storage and dismiss wands for Pa Van's portal chests.",
+    "uuid": "1298238c-fa57-4d7f-b9aa-6f3e561589e0",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 20, 80]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "2026b975-7def-4231-bb2d-f0f672da26a6",
+      "version": [1, 0, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "230385d4-c1d5-4f63-b68a-7442a8ddc0eb",
+      "entry": "scripts/main.js",
+      "version": [1, 0, 0]
+    }
+  ],
+  "dependencies": [
+    {
+      "uuid": "9782aed3-e16a-4ce0-b439-e8708b0fdf9e",
+      "version": [1, 0, 0]
+    },
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.0.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
+  ]
+}

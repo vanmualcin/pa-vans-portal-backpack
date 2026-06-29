@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Pa Van's Portal Backpack Resources",
+    "description": "Version 1.0.0. Resources for Pa Van's portal backpack add-on.",
+    "uuid": "9782aed3-e16a-4ce0-b439-e8708b0fdf9e",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 20, 80]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "adf57899-cd24-4539-9b36-a61614c6d19d",
+      "version": [1, 0, 0]
+    }
+  ]
+}
