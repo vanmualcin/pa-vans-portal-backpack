@@ -2,7 +2,7 @@
   "format_version": "1.10.0",
   "minecraft:client_entity": {
     "description": {
-      "identifier": "mcbackpack:backpack_container",
+      "identifier": "pv:storage_container",
       "materials": {
         "default": "entity_alphatest"
       },
@@ -10,10 +10,10 @@
         "default": "textures/entity/storage_chest"
       },
       "geometry": {
-        "default": "geometry.mcbackpack.container"
+        "default": "geometry.pv.storage_container"
       },
       "render_controllers": [
-        "controller.render.mcbackpack.container"
+        "controller.render.pv.storage_container"
       ]
     }
   }

@@ -1,7 +1,7 @@
 {
   "format_version": "1.8.0",
   "render_controllers": {
-    "controller.render.mcbackpack.container": {
+    "controller.render.pv.storage_container": {
       "geometry": "Geometry.default",
       "materials": [
         {

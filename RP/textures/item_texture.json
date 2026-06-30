@@ -1,10 +1,7 @@
 {
-  "resource_pack_name": "Infinite Backpack Resources",
+  "resource_pack_name": "Pa Van's Wand Collection Resources",
   "texture_name": "atlas.items",
   "texture_data": {
-    "infinite_backpack": {
-      "textures": "textures/items/infinite_backpack"
-    },
     "storage_wand": {
       "textures": "textures/items/storage_wand"
     },

@@ -2,14 +2,14 @@
   "format_version": "1.20.80",
   "minecraft:item": {
     "description": {
-      "identifier": "bp:wand",
+      "identifier": "pv:storage_wand",
       "menu_category": {
         "category": "items"
       }
     },
     "components": {
       "minecraft:display_name": {
-        "value": "Portal Wand"
+        "value": "Storage Wand"
       },
       "minecraft:icon": {
         "textures": {

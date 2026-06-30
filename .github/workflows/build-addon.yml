@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    name: Package Pa Van's Portal Backpack
+    name: Package Pa Van's Wand Collection
     runs-on: ubuntu-latest
 
     steps:
@@ -37,7 +37,7 @@ jobs:
 
           $bpManifest = Get-Content "BP/manifest.json" -Raw | ConvertFrom-Json
           $version = $bpManifest.header.version -join "."
-          $outputName = "PaVansPortalBackpack_$version.mcaddon"
+          $outputName = "PaVansWandCollection_$version.mcaddon"
 
           New-Item -ItemType Directory -Force -Path "dist" | Out-Null
           Remove-Item "dist/*.mcaddon" -Force -ErrorAction SilentlyContinue
@@ -52,7 +52,7 @@ jobs:
       - name: Upload addon
         uses: actions/upload-artifact@v4
         with:
-          name: PaVansPortalBackpack
+          name: PaVansWandCollection
           path: dist/*.mcaddon
           if-no-files-found: error
 
@@ -68,7 +68,7 @@ jobs:
       - name: Download addon
         uses: actions/download-artifact@v4
         with:
-          name: PaVansPortalBackpack
+          name: PaVansWandCollection
           path: dist
 
       - name: Attach addon to release
