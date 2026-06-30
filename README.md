@@ -4,7 +4,7 @@ This Bedrock add-on adds craftable magic wands with utility and combat effects.
 
 ## How to use
 
-1. Import `PaVansWandCollection_1.0.4.mcaddon` from the GitHub release into Minecraft Bedrock.
+1. Import `PaVansWandCollection_1.0.5.mcaddon` from the GitHub release into Minecraft Bedrock.
 2. Activate both the behavior pack and resource pack on your world.
 3. Turn on Beta APIs / scripting experiments if your Minecraft version asks for them.
 4. Craft the wands at a crafting table, or run:
@@ -25,20 +25,20 @@ Crafting uses lapis lazuli, redstone, and a stick.
 
 ### Fire Blast Wand
 
-Use the Fire Blast Wand to launch a Ghast-like explosive blast in the direction you are looking. It detonates with a large mob-damaging radius without breaking terrain.
+Click the Fire Blast Wand to launch the current Ghast-like blast in the direction you are looking. Hold use, like drawing a bow, then release to launch a destructive blast that breaks blocks with a larger radius at full charge.
 
-Crafting uses a ghast tear, blaze powder, and a stick.
+Crafting uses a gold ingot, redstone, and a stick.
 
 ### Restoration Wand
 
 Use the Restoration Wand while aiming at a zombie villager within 8 blocks to instantly cure it into a villager.
 
-Crafting uses a golden apple, fermented spider eye, and a stick.
+Crafting uses an emerald, gold ingot, and a stick.
 
 ## Notes
 
 - Each summoned storage chest is a real 27-slot entity container.
 - The Storage Wand moves your matching storage chest out of sight instead of destroying it, so the stored items are not intentionally deleted.
 - Dismissing only affects the chest tied to your wand and selected page.
-- The Fire Blast Wand damages non-player entities in the blast radius without intentionally breaking blocks.
+- The Fire Blast Wand's click blast damages non-player entities without intentionally breaking blocks. Its charged blast is destructive.
 - The Restoration Wand needs a clear line of sight to the zombie villager.

@@ -9,10 +9,10 @@
     ],
     "unlock": [
       {
-        "item": "minecraft:ghast_tear"
+        "item": "minecraft:gold_ingot"
       },
       {
-        "item": "minecraft:blaze_powder"
+        "item": "minecraft:redstone"
       },
       {
         "item": "minecraft:stick"
@@ -20,15 +20,15 @@
     ],
     "pattern": [
       " G ",
-      " B ",
+      " R ",
       " S "
     ],
     "key": {
       "G": {
-        "item": "minecraft:ghast_tear"
+        "item": "minecraft:gold_ingot"
       },
-      "B": {
-        "item": "minecraft:blaze_powder"
+      "R": {
+        "item": "minecraft:redstone"
       },
       "S": {
         "item": "minecraft:stick"
