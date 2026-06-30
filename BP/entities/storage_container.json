@@ -2,7 +2,7 @@
   "format_version": "1.20.80",
   "minecraft:entity": {
     "description": {
-      "identifier": "mcbackpack:backpack_container",
+      "identifier": "pv:storage_container",
       "is_spawnable": false,
       "is_summonable": true,
       "is_experimental": false
@@ -10,7 +10,7 @@
     "components": {
       "minecraft:type_family": {
         "family": [
-          "mcbackpack_container"
+          "pv_storage_container"
         ]
       },
       "minecraft:collision_box": {

@@ -2,7 +2,7 @@
   "format_version": "1.20.10",
   "minecraft:recipe_shaped": {
     "description": {
-      "identifier": "bp:wand"
+      "identifier": "pv:storage_wand"
     },
     "tags": [
       "crafting_table"
@@ -35,7 +35,7 @@
       }
     },
     "result": {
-      "item": "bp:wand",
+      "item": "pv:storage_wand",
       "count": 1
     }
   }
