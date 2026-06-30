@@ -7,6 +7,9 @@
     },
     "fire_wand": {
       "textures": "textures/items/fire_wand"
+    },
+    "restoration_wand": {
+      "textures": "textures/items/restoration_wand"
     }
   }
 }

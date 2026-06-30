@@ -2,6 +2,7 @@ import { system, world } from "@minecraft/server";
 
 const STORAGE_WAND_TYPE = "pv:storage_wand";
 const FIRE_WAND_TYPE = "pv:fire_wand";
+const RESTORATION_WAND_TYPE = "pv:restoration_wand";
 const STORAGE_ID_PROPERTY = "pv:storage_wand_id";
 const STORAGE_ENTITY = "pv:storage_container";
 const STORAGE_TAG_PREFIX = "pv_storage_id_";
@@ -15,13 +16,19 @@ const FIRE_BLAST_RADIUS = 8;
 const FIRE_BLAST_STEP = 1.5;
 const FIRE_BLAST_COOLDOWN_TICKS = 20;
 const FIRE_BLAST_DAMAGE = 1000;
+const RESTORATION_RANGE = 8;
+const RESTORATION_TARGET_RADIUS = 1.4;
+const RESTORATION_COOLDOWN_TICKS = 40;
 const fireBlastCooldowns = new Map();
+const restorationCooldowns = new Map();
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   if (itemStack?.typeId === STORAGE_WAND_TYPE) {
     system.run(() => toggleStorageContainer(source));
   } else if (itemStack?.typeId === FIRE_WAND_TYPE) {
     system.run(() => fireBlast(source));
+  } else if (itemStack?.typeId === RESTORATION_WAND_TYPE) {
+    system.run(() => restoreZombieVillager(source));
   }
 });
 
@@ -108,6 +115,120 @@ function hasHealth(entity) {
     return Boolean(entity.getComponent("minecraft:health"));
   } catch {
     return false;
+  }
+}
+
+function restoreZombieVillager(player) {
+  if (!isEntityUsable(player)) return;
+
+  const cooldownKey = player.id ?? player.name;
+  const currentTick = system.currentTick ?? 0;
+  const readyTick = restorationCooldowns.get(cooldownKey) ?? 0;
+  if (currentTick < readyTick) return;
+
+  const target = findTargetedZombieVillager(player);
+  if (!target) {
+    player.sendMessage(`Aim at a zombie villager within ${RESTORATION_RANGE} blocks.`);
+    return;
+  }
+
+  restorationCooldowns.set(cooldownKey, currentTick + RESTORATION_COOLDOWN_TICKS);
+
+  const location = target.location;
+  const nameTag = target.nameTag;
+
+  try {
+    const villager = player.dimension.spawnEntity("minecraft:villager_v2", location);
+    if (nameTag) villager.nameTag = nameTag;
+    removeEntity(target);
+    spawnRestorationParticles(player.dimension, location);
+    player.sendMessage("Zombie villager restored.");
+  } catch (error) {
+    console.warn(`Failed to restore zombie villager: ${error}`);
+    player.sendMessage("Could not restore that zombie villager here.");
+  }
+}
+
+function findTargetedZombieVillager(player) {
+  const origin = getEyeLocation(player);
+  const direction = normalizeVector(getViewDirection(player));
+  const entities = player.dimension.getEntities({
+    location: origin,
+    maxDistance: RESTORATION_RANGE,
+  });
+
+  let closest;
+  let closestProjection = RESTORATION_RANGE + 1;
+
+  for (const entity of entities) {
+    if (!isZombieVillager(entity)) continue;
+
+    const targetLocation = getEntityCenter(entity);
+    const offset = subtractVector(targetLocation, origin);
+    const projection = dotVector(offset, direction);
+    if (projection < 0 || projection > RESTORATION_RANGE) continue;
+
+    const closestPoint = addVector(origin, multiplyVector(direction, projection));
+    const missDistance = distanceBetween(targetLocation, closestPoint);
+    if (missDistance > RESTORATION_TARGET_RADIUS) continue;
+    if (!hasClearPath(player.dimension, origin, direction, projection)) continue;
+
+    if (projection < closestProjection) {
+      closest = entity;
+      closestProjection = projection;
+    }
+  }
+
+  return closest;
+}
+
+function isZombieVillager(entity) {
+  return entity?.typeId === "minecraft:zombie_villager" || entity?.typeId === "minecraft:zombie_villager_v2";
+}
+
+function getEntityCenter(entity) {
+  const location = entity.location;
+  return {
+    x: location.x,
+    y: location.y + 1,
+    z: location.z,
+  };
+}
+
+function hasClearPath(dimension, origin, direction, range) {
+  for (let distance = 0.75; distance < range; distance += 0.75) {
+    const location = addVector(origin, multiplyVector(direction, distance));
+    const block = getBlockAtLocation(dimension, location);
+    if (block && !block.isAir && !block.isLiquid) return false;
+  }
+
+  return true;
+}
+
+function removeEntity(entity) {
+  try {
+    entity.remove();
+  } catch {
+    try {
+      entity.kill();
+    } catch {
+      // The restored villager has already been spawned, so leave unavailable entities alone.
+    }
+  }
+}
+
+function spawnRestorationParticles(dimension, location) {
+  for (const particle of ["minecraft:villager_happy", "minecraft:totem_particle"]) {
+    try {
+      dimension.spawnParticle(particle, {
+        x: location.x,
+        y: location.y + 1,
+        z: location.z,
+      });
+      return;
+    } catch {
+      // The cure should still happen when a cosmetic particle is unavailable.
+    }
   }
 }
 
@@ -335,12 +456,24 @@ function addVector(a, b) {
   };
 }
 
+function subtractVector(a, b) {
+  return {
+    x: a.x - b.x,
+    y: a.y - b.y,
+    z: a.z - b.z,
+  };
+}
+
 function multiplyVector(vector, scalar) {
   return {
     x: vector.x * scalar,
     y: vector.y * scalar,
     z: vector.z * scalar,
   };
+}
+
+function dotVector(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
 function distanceBetween(a, b) {
