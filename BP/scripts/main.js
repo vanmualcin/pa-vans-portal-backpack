@@ -369,7 +369,6 @@ function restoreZombieVillager(player) {
 
   const target = findTargetedZombieVillager(player);
   if (!target) {
-    player.sendMessage(`Aim at a zombie villager within ${RESTORATION_RANGE} blocks.`);
     return;
   }
 
@@ -383,10 +382,8 @@ function restoreZombieVillager(player) {
     if (nameTag) villager.nameTag = nameTag;
     removeEntity(target);
     spawnRestorationParticles(player.dimension, location);
-    player.sendMessage("Zombie villager restored.");
   } catch (error) {
     console.warn(`Failed to restore zombie villager: ${error}`);
-    player.sendMessage("Could not restore that zombie villager here.");
   }
 }
 
@@ -475,7 +472,6 @@ function toggleStorageContainer(player) {
 
   const held = getHeldStorageWand(player);
   if (!held) {
-    player.sendMessage("Hold the Storage Wand and use it again.");
     return;
   }
 
@@ -485,17 +481,12 @@ function toggleStorageContainer(player) {
   const existingEntity = findStorageEntity(tag);
 
   if (existingEntity && isStoragePresent(existingEntity, player)) {
-    if (dismissStorageEntity(existingEntity, player)) {
-      player.sendMessage(`Storage Chest Page ${page} dismissed.`);
-    } else {
-      player.sendMessage("Could not dismiss the storage container here.");
-    }
+    dismissStorageEntity(existingEntity, player);
     return;
   }
 
   const storageEntity = existingEntity ?? createStorageEntity(player, storageId, page);
   if (!storageEntity) {
-    player.sendMessage("Could not open the storage container here.");
     return;
   }
 
@@ -504,7 +495,6 @@ function toggleStorageContainer(player) {
   storageEntity.removeTag(STORAGE_DISMISSED_TAG);
   storageEntity.nameTag = `Storage Chest Page ${page}`;
   updateStorageWandLore(player, storageId);
-  player.sendMessage(`Storage Chest Page ${page} summoned. Tap it to use those 27 slots.`);
 }
 
 function getHeldStorageWand(player) {
