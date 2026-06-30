@@ -1,6 +1,7 @@
 import { system, world } from "@minecraft/server";
 
 const BACKPACK_TYPE = "bp:wand";
+const FIRE_WAND_TYPE = "bp:fire_wand";
 const BACKPACK_ID_PROPERTY = "mcbackpack:id";
 const BACKPACK_ENTITY = "mcbackpack:backpack_container";
 const BACKPACK_TAG_PREFIX = "mcbackpack_id_";
@@ -9,12 +10,114 @@ const BACKPACK_OPEN_TAG = "mcbackpack_open";
 const BACKPACK_DISMISSED_TAG = "mcbackpack_dismissed";
 const HIDDEN_Y = -60;
 const DIMENSIONS = ["overworld", "nether", "the_end"];
+const FIRE_BLAST_RANGE = 36;
+const FIRE_BLAST_RADIUS = 8;
+const FIRE_BLAST_STEP = 1.5;
+const FIRE_BLAST_COOLDOWN_TICKS = 20;
+const FIRE_BLAST_DAMAGE = 1000;
+const fireBlastCooldowns = new Map();
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   if (itemStack?.typeId === BACKPACK_TYPE) {
     system.run(() => toggleBackpackContainer(source));
+  } else if (itemStack?.typeId === FIRE_WAND_TYPE) {
+    system.run(() => fireBlast(source));
   }
 });
+
+function fireBlast(player) {
+  if (!isEntityUsable(player)) return;
+
+  const cooldownKey = player.id ?? player.name;
+  const currentTick = system.currentTick ?? 0;
+  const readyTick = fireBlastCooldowns.get(cooldownKey) ?? 0;
+  if (currentTick < readyTick) return;
+  fireBlastCooldowns.set(cooldownKey, currentTick + FIRE_BLAST_COOLDOWN_TICKS);
+
+  const direction = normalizeVector(getViewDirection(player));
+  const origin = getEyeLocation(player);
+  const impact = findFireBlastImpact(player.dimension, origin, direction);
+
+  spawnFireBlastTrail(player.dimension, origin, direction, distanceBetween(origin, impact));
+  detonateFireBlast(player, impact);
+}
+
+function findFireBlastImpact(dimension, origin, direction) {
+  let previousLocation = origin;
+
+  for (let distance = FIRE_BLAST_STEP; distance <= FIRE_BLAST_RANGE; distance += FIRE_BLAST_STEP) {
+    const location = addVector(origin, multiplyVector(direction, distance));
+    const block = getBlockAtLocation(dimension, location);
+    if (block && !block.isAir && !block.isLiquid) return previousLocation;
+    previousLocation = location;
+  }
+
+  return addVector(origin, multiplyVector(direction, FIRE_BLAST_RANGE));
+}
+
+function spawnFireBlastTrail(dimension, origin, direction, range) {
+  for (let distance = 1; distance <= range; distance += 2) {
+    const location = addVector(origin, multiplyVector(direction, distance));
+    try {
+      dimension.spawnParticle("minecraft:basic_flame_particle", location);
+    } catch {
+      // Particles are cosmetic; the blast should still work if they are unavailable.
+    }
+  }
+}
+
+function detonateFireBlast(player, location) {
+  try {
+    player.dimension.createExplosion(location, FIRE_BLAST_RADIUS, {
+      breaksBlocks: true,
+      causesFire: true,
+      source: player,
+    });
+  } catch {
+    try {
+      player.dimension.createExplosion(location, FIRE_BLAST_RADIUS);
+    } catch {
+      player.sendMessage("The fire blast fizzled out.");
+      return;
+    }
+  }
+
+  killBlastMobs(player, location);
+}
+
+function killBlastMobs(player, location) {
+  const entities = player.dimension.getEntities({
+    location,
+    maxDistance: FIRE_BLAST_RADIUS,
+    excludeTypes: ["minecraft:player"],
+  });
+
+  for (const entity of entities) {
+    if (!isEntityUsable(entity) || entity.id === player.id) continue;
+    if (!hasHealth(entity)) continue;
+
+    try {
+      entity.applyDamage(FIRE_BLAST_DAMAGE, {
+        damagingEntity: player,
+        cause: "entityExplosion",
+      });
+    } catch {
+      try {
+        entity.kill();
+      } catch {
+        // Some entities may be immune or unavailable by the time damage is applied.
+      }
+    }
+  }
+}
+
+function hasHealth(entity) {
+  try {
+    return Boolean(entity.getComponent("minecraft:health"));
+  } catch {
+    return false;
+  }
+}
 
 function toggleBackpackContainer(player) {
   if (!isEntityUsable(player)) return;
@@ -199,6 +302,57 @@ function getViewDirection(player) {
   } catch {
     return { x: 0, y: 0, z: 1 };
   }
+}
+
+function getEyeLocation(player) {
+  const location = player.location;
+  return {
+    x: location.x,
+    y: location.y + 1.6,
+    z: location.z,
+  };
+}
+
+function getBlockAtLocation(dimension, location) {
+  try {
+    return dimension.getBlock({
+      x: Math.floor(location.x),
+      y: Math.floor(location.y),
+      z: Math.floor(location.z),
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeVector(vector) {
+  const length = Math.sqrt(vector.x ** 2 + vector.y ** 2 + vector.z ** 2);
+  if (length === 0) return { x: 0, y: 0, z: 1 };
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+    z: vector.z / length,
+  };
+}
+
+function addVector(a, b) {
+  return {
+    x: a.x + b.x,
+    y: a.y + b.y,
+    z: a.z + b.z,
+  };
+}
+
+function multiplyVector(vector, scalar) {
+  return {
+    x: vector.x * scalar,
+    y: vector.y * scalar,
+    z: vector.z * scalar,
+  };
+}
+
+function distanceBetween(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
 }
 
 function updateBackpackLore(player, backpackId) {

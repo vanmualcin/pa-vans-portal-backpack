@@ -7,6 +7,9 @@
     },
     "storage_wand": {
       "textures": "textures/items/storage_wand"
+    },
+    "fire_wand": {
+      "textures": "textures/items/fire_wand"
     }
   }
 }
