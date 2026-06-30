@@ -27,13 +27,13 @@ Crafting uses lapis lazuli, redstone, and a stick.
 
 Click the Fire Blast Wand to launch the current Ghast-like blast in the direction you are looking. Hold use, like drawing a bow, then release to launch a destructive blast that breaks blocks with a larger radius at full charge.
 
-Crafting uses a ghast tear, blaze powder, and a stick.
+Crafting uses a gold ingot, redstone, and a stick.
 
 ### Restoration Wand
 
 Use the Restoration Wand while aiming at a zombie villager within 8 blocks to instantly cure it into a villager.
 
-Crafting uses a golden apple, fermented spider eye, and a stick.
+Crafting uses an emerald, gold ingot, and a stick.
 
 ## Notes
 

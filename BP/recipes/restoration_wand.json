@@ -9,26 +9,26 @@
     ],
     "unlock": [
       {
-        "item": "minecraft:golden_apple"
+        "item": "minecraft:emerald"
       },
       {
-        "item": "minecraft:fermented_spider_eye"
+        "item": "minecraft:gold_ingot"
       },
       {
         "item": "minecraft:stick"
       }
     ],
     "pattern": [
+      " E ",
       " G ",
-      " F ",
       " S "
     ],
     "key": {
-      "G": {
-        "item": "minecraft:golden_apple"
+      "E": {
+        "item": "minecraft:emerald"
       },
-      "F": {
-        "item": "minecraft:fermented_spider_eye"
+      "G": {
+        "item": "minecraft:gold_ingot"
       },
       "S": {
         "item": "minecraft:stick"
