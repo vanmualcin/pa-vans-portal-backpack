@@ -16,37 +16,103 @@ const FIRE_BLAST_RADIUS = 8;
 const FIRE_BLAST_STEP = 1.5;
 const FIRE_BLAST_COOLDOWN_TICKS = 20;
 const FIRE_BLAST_DAMAGE = 1000;
+const FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS = 10;
+const FIRE_DESTRUCTIVE_MAX_CHARGE_TICKS = 30;
+const FIRE_DESTRUCTIVE_MIN_RADIUS = 3;
+const FIRE_DESTRUCTIVE_MAX_RADIUS = 7;
+const FIRE_DESTRUCTIVE_COOLDOWN_TICKS = 60;
 const RESTORATION_RANGE = 8;
 const RESTORATION_TARGET_RADIUS = 1.4;
 const RESTORATION_COOLDOWN_TICKS = 40;
+const canTrackFireWandCharge = Boolean(world.afterEvents.itemStartUse?.subscribe) &&
+  Boolean(world.afterEvents.itemReleaseUse?.subscribe || world.afterEvents.itemStopUse?.subscribe);
 const fireBlastCooldowns = new Map();
+const fireWandChargeStarts = new Map();
+const fireWandReleaseTicks = new Map();
 const restorationCooldowns = new Map();
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   if (itemStack?.typeId === STORAGE_WAND_TYPE) {
     system.run(() => toggleStorageContainer(source));
-  } else if (itemStack?.typeId === FIRE_WAND_TYPE) {
+  } else if (itemStack?.typeId === FIRE_WAND_TYPE && !canTrackFireWandCharge) {
     system.run(() => fireBlast(source));
   } else if (itemStack?.typeId === RESTORATION_WAND_TYPE) {
     system.run(() => restoreZombieVillager(source));
   }
 });
 
+world.afterEvents.itemStartUse?.subscribe(({ source, itemStack }) => {
+  if (itemStack?.typeId === FIRE_WAND_TYPE) {
+    fireWandChargeStarts.set(getCooldownKey(source), system.currentTick ?? 0);
+  }
+});
+
+world.afterEvents.itemReleaseUse?.subscribe((event) => {
+  if (event.itemStack?.typeId === FIRE_WAND_TYPE) {
+    system.run(() => releaseFireWand(event));
+  }
+});
+
+world.afterEvents.itemStopUse?.subscribe((event) => {
+  if (event.itemStack?.typeId === FIRE_WAND_TYPE) {
+    system.run(() => releaseFireWand(event));
+  }
+});
+
 function fireBlast(player) {
   if (!isEntityUsable(player)) return;
 
-  const cooldownKey = player.id ?? player.name;
-  const currentTick = system.currentTick ?? 0;
-  const readyTick = fireBlastCooldowns.get(cooldownKey) ?? 0;
-  if (currentTick < readyTick) return;
-  fireBlastCooldowns.set(cooldownKey, currentTick + FIRE_BLAST_COOLDOWN_TICKS);
+  if (!tryUseCooldown(player, fireBlastCooldowns, FIRE_BLAST_COOLDOWN_TICKS)) return;
 
+  fireBlastAtImpact(player, false, FIRE_BLAST_RADIUS);
+}
+
+function releaseFireWand(event) {
+  const player = event.source;
+  if (!isEntityUsable(player)) return;
+
+  const cooldownKey = getCooldownKey(player);
+  const currentTick = system.currentTick ?? 0;
+  if (fireWandReleaseTicks.get(cooldownKey) === currentTick) return;
+  fireWandReleaseTicks.set(cooldownKey, currentTick);
+
+  const heldTicks = getFireWandHeldTicks(event);
+  fireWandChargeStarts.delete(cooldownKey);
+
+  if (heldTicks < FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS) {
+    fireBlast(player);
+    return;
+  }
+
+  if (!tryUseCooldown(player, fireBlastCooldowns, FIRE_DESTRUCTIVE_COOLDOWN_TICKS)) return;
+
+  const charge = Math.min(
+    1,
+    (heldTicks - FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS) /
+      (FIRE_DESTRUCTIVE_MAX_CHARGE_TICKS - FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS),
+  );
+  const radius = FIRE_DESTRUCTIVE_MIN_RADIUS +
+    (FIRE_DESTRUCTIVE_MAX_RADIUS - FIRE_DESTRUCTIVE_MIN_RADIUS) * charge;
+
+  fireBlastAtImpact(player, true, radius);
+}
+
+function getFireWandHeldTicks(event) {
+  const player = event.source;
+  const currentTick = system.currentTick ?? 0;
+  const startTick = fireWandChargeStarts.get(getCooldownKey(player));
+  if (typeof startTick === "number") return Math.max(0, currentTick - startTick);
+  if (typeof event.useDuration === "number") return event.useDuration;
+  return 0;
+}
+
+function fireBlastAtImpact(player, breaksBlocks, radius) {
   const direction = normalizeVector(getViewDirection(player));
   const origin = getEyeLocation(player);
   const impact = findFireBlastImpact(player.dimension, origin, direction);
 
   spawnFireBlastTrail(player.dimension, origin, direction, distanceBetween(origin, impact));
-  detonateFireBlast(player, impact);
+  detonateFireBlast(player, impact, breaksBlocks, radius);
 }
 
 function findFireBlastImpact(dimension, origin, direction) {
@@ -73,20 +139,33 @@ function spawnFireBlastTrail(dimension, origin, direction, range) {
   }
 }
 
-function detonateFireBlast(player, location) {
+function detonateFireBlast(player, location, breaksBlocks, radius) {
+  if (breaksBlocks) {
+    try {
+      player.dimension.createExplosion(location, radius, {
+        breaksBlocks: true,
+        causesFire: true,
+        source: player,
+      });
+      return;
+    } catch (error) {
+      console.warn(`Failed to create destructive fire blast: ${error}`);
+    }
+  }
+
   try {
     player.dimension.spawnParticle("minecraft:large_explosion", location);
   } catch {
     // The damage pulse still applies if the visual effect is unavailable.
   }
 
-  killBlastMobs(player, location);
+  killBlastMobs(player, location, radius);
 }
 
-function killBlastMobs(player, location) {
+function killBlastMobs(player, location, radius = FIRE_BLAST_RADIUS) {
   const entities = player.dimension.getEntities({
     location,
-    maxDistance: FIRE_BLAST_RADIUS,
+    maxDistance: radius,
     excludeTypes: ["minecraft:player"],
   });
 
@@ -118,13 +197,30 @@ function hasHealth(entity) {
   }
 }
 
+function getCooldownKey(entity) {
+  return entity.id ?? entity.name;
+}
+
+function isCooldownReady(entity, cooldowns) {
+  const cooldownKey = getCooldownKey(entity);
+  const currentTick = system.currentTick ?? 0;
+  const readyTick = cooldowns.get(cooldownKey) ?? 0;
+  return currentTick >= readyTick;
+}
+
+function tryUseCooldown(entity, cooldowns, cooldownTicks) {
+  const cooldownKey = getCooldownKey(entity);
+  const currentTick = system.currentTick ?? 0;
+  const readyTick = cooldowns.get(cooldownKey) ?? 0;
+  if (currentTick < readyTick) return false;
+  cooldowns.set(cooldownKey, currentTick + cooldownTicks);
+  return true;
+}
+
 function restoreZombieVillager(player) {
   if (!isEntityUsable(player)) return;
 
-  const cooldownKey = player.id ?? player.name;
-  const currentTick = system.currentTick ?? 0;
-  const readyTick = restorationCooldowns.get(cooldownKey) ?? 0;
-  if (currentTick < readyTick) return;
+  if (!isCooldownReady(player, restorationCooldowns)) return;
 
   const target = findTargetedZombieVillager(player);
   if (!target) {
@@ -132,7 +228,7 @@ function restoreZombieVillager(player) {
     return;
   }
 
-  restorationCooldowns.set(cooldownKey, currentTick + RESTORATION_COOLDOWN_TICKS);
+  tryUseCooldown(player, restorationCooldowns, RESTORATION_COOLDOWN_TICKS);
 
   const location = target.location;
   const nameTag = target.nameTag;

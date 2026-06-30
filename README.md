@@ -25,7 +25,7 @@ Crafting uses lapis lazuli, redstone, and a stick.
 
 ### Fire Blast Wand
 
-Use the Fire Blast Wand to launch a Ghast-like explosive blast in the direction you are looking. It detonates with a large mob-damaging radius without breaking terrain.
+Click the Fire Blast Wand to launch the current Ghast-like blast in the direction you are looking. Hold use, like drawing a bow, then release to launch a destructive blast that breaks blocks with a larger radius at full charge.
 
 Crafting uses a ghast tear, blaze powder, and a stick.
 
@@ -40,5 +40,5 @@ Crafting uses a golden apple, fermented spider eye, and a stick.
 - Each summoned storage chest is a real 27-slot entity container.
 - The Storage Wand moves your matching storage chest out of sight instead of destroying it, so the stored items are not intentionally deleted.
 - Dismissing only affects the chest tied to your wand and selected page.
-- The Fire Blast Wand damages non-player entities in the blast radius without intentionally breaking blocks.
+- The Fire Blast Wand's click blast damages non-player entities without intentionally breaking blocks. Its charged blast is destructive.
 - The Restoration Wand needs a clear line of sight to the zombie villager.
