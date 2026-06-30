@@ -21,6 +21,7 @@ const FIRE_DESTRUCTIVE_MAX_CHARGE_TICKS = 30;
 const FIRE_DESTRUCTIVE_MIN_RADIUS = 3;
 const FIRE_DESTRUCTIVE_MAX_RADIUS = 7;
 const FIRE_DESTRUCTIVE_COOLDOWN_TICKS = 60;
+const FIRE_CHARGE_FEEDBACK_INTERVAL_TICKS = 4;
 const RESTORATION_RANGE = 8;
 const RESTORATION_TARGET_RADIUS = 1.4;
 const RESTORATION_COOLDOWN_TICKS = 40;
@@ -29,6 +30,7 @@ const canTrackFireWandCharge = Boolean(world.afterEvents.itemStartUse?.subscribe
 const fireBlastCooldowns = new Map();
 const fireWandChargeStarts = new Map();
 const fireWandReleaseTicks = new Map();
+const fireWandFullChargeNotified = new Set();
 const restorationCooldowns = new Map();
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
@@ -43,7 +45,7 @@ world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
 
 world.afterEvents.itemStartUse?.subscribe(({ source, itemStack }) => {
   if (itemStack?.typeId === FIRE_WAND_TYPE) {
-    fireWandChargeStarts.set(getCooldownKey(source), system.currentTick ?? 0);
+    startFireWandCharge(source);
   }
 });
 
@@ -58,6 +60,16 @@ world.afterEvents.itemStopUse?.subscribe((event) => {
     system.run(() => releaseFireWand(event));
   }
 });
+
+world.afterEvents.entityHitBlock?.subscribe((event) => {
+  system.run(() => flickHeldFireWand(event.damagingEntity ?? event.entity ?? event.source));
+});
+
+world.afterEvents.entityHitEntity?.subscribe((event) => {
+  system.run(() => flickHeldFireWand(event.damagingEntity ?? event.entity ?? event.source));
+});
+
+system.runInterval(updateFireWandChargeFeedback, FIRE_CHARGE_FEEDBACK_INTERVAL_TICKS);
 
 function fireBlast(player) {
   if (!isEntityUsable(player)) return;
@@ -77,7 +89,7 @@ function releaseFireWand(event) {
   fireWandReleaseTicks.set(cooldownKey, currentTick);
 
   const heldTicks = getFireWandHeldTicks(event);
-  fireWandChargeStarts.delete(cooldownKey);
+  stopFireWandCharge(player);
 
   if (heldTicks < FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS) {
     fireBlast(player);
@@ -86,11 +98,7 @@ function releaseFireWand(event) {
 
   if (!tryUseCooldown(player, fireBlastCooldowns, FIRE_DESTRUCTIVE_COOLDOWN_TICKS)) return;
 
-  const charge = Math.min(
-    1,
-    (heldTicks - FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS) /
-      (FIRE_DESTRUCTIVE_MAX_CHARGE_TICKS - FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS),
-  );
+  const charge = getFireWandCharge(heldTicks);
   const radius = FIRE_DESTRUCTIVE_MIN_RADIUS +
     (FIRE_DESTRUCTIVE_MAX_RADIUS - FIRE_DESTRUCTIVE_MIN_RADIUS) * charge;
 
@@ -111,8 +119,149 @@ function fireBlastAtImpact(player, breaksBlocks, radius) {
   const origin = getEyeLocation(player);
   const impact = findFireBlastImpact(player.dimension, origin, direction);
 
+  spawnFireWandFlick(player, breaksBlocks);
+  playFireWandReleaseSound(player, breaksBlocks);
   spawnFireBlastTrail(player.dimension, origin, direction, distanceBetween(origin, impact));
   detonateFireBlast(player, impact, breaksBlocks, radius);
+}
+
+function startFireWandCharge(player) {
+  if (!isEntityUsable(player)) return;
+
+  const cooldownKey = getCooldownKey(player);
+  fireWandChargeStarts.set(cooldownKey, system.currentTick ?? 0);
+  fireWandFullChargeNotified.delete(cooldownKey);
+  playSound(player, "fire.ignite", 0.25, 1.4);
+}
+
+function stopFireWandCharge(player) {
+  const cooldownKey = getCooldownKey(player);
+  fireWandChargeStarts.delete(cooldownKey);
+  fireWandFullChargeNotified.delete(cooldownKey);
+}
+
+function updateFireWandChargeFeedback() {
+  const currentTick = system.currentTick ?? 0;
+
+  for (const player of world.getPlayers()) {
+    if (!isEntityUsable(player)) continue;
+
+    const cooldownKey = getCooldownKey(player);
+    const startTick = fireWandChargeStarts.get(cooldownKey);
+    if (typeof startTick !== "number") continue;
+
+    if (!isHoldingItem(player, FIRE_WAND_TYPE)) {
+      stopFireWandCharge(player);
+      continue;
+    }
+
+    const heldTicks = Math.max(0, currentTick - startTick);
+    const charge = getFireWandCharge(heldTicks);
+    spawnFireWandChargeParticles(player, charge);
+
+    if (heldTicks >= FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS && currentTick % 12 === 0) {
+      playSound(player, "random.fizz", 0.12 + charge * 0.18, 0.8 + charge * 0.8);
+    }
+
+    if (charge >= 1 && !fireWandFullChargeNotified.has(cooldownKey)) {
+      fireWandFullChargeNotified.add(cooldownKey);
+      spawnFireWandFullChargeBurst(player);
+      playSound(player, "random.orb", 0.55, 1.6);
+    }
+  }
+}
+
+function getFireWandCharge(heldTicks) {
+  return Math.min(
+    1,
+    Math.max(
+      0,
+      (heldTicks - FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS) /
+        (FIRE_DESTRUCTIVE_MAX_CHARGE_TICKS - FIRE_DESTRUCTIVE_MIN_CHARGE_TICKS),
+    ),
+  );
+}
+
+function spawnFireWandChargeParticles(player, charge) {
+  const location = getWandTipLocation(player);
+  const count = 1 + Math.floor(charge * 3);
+
+  for (let i = 0; i < count; i++) {
+    const offset = (i - count / 2) * 0.06;
+    spawnParticle(player.dimension, "minecraft:basic_flame_particle", {
+      x: location.x + offset,
+      y: location.y + Math.random() * 0.12,
+      z: location.z - offset,
+    });
+  }
+
+  if (charge >= 0.7) {
+    spawnParticle(player.dimension, "minecraft:lava_particle", location);
+  }
+}
+
+function spawnFireWandFullChargeBurst(player) {
+  const location = getWandTipLocation(player);
+
+  for (let i = 0; i < 8; i++) {
+    spawnParticle(player.dimension, "minecraft:basic_flame_particle", {
+      x: location.x + (Math.random() - 0.5) * 0.6,
+      y: location.y + Math.random() * 0.5,
+      z: location.z + (Math.random() - 0.5) * 0.6,
+    });
+  }
+}
+
+function spawnFireWandFlick(player, isCharged) {
+  const direction = normalizeVector(getViewDirection(player));
+  const origin = getWandTipLocation(player);
+  const particleCount = isCharged ? 10 : 5;
+
+  for (let i = 0; i < particleCount; i++) {
+    const distance = 0.25 + i * 0.18;
+    const location = addVector(origin, multiplyVector(direction, distance));
+    spawnParticle(player.dimension, "minecraft:basic_flame_particle", location);
+  }
+
+  if (isCharged) {
+    spawnParticle(player.dimension, "minecraft:large_explosion", addVector(origin, multiplyVector(direction, 1.2)));
+  }
+}
+
+function flickHeldFireWand(entity) {
+  if (!isEntityUsable(entity) || !isHoldingItem(entity, FIRE_WAND_TYPE)) return;
+
+  spawnFireWandFlick(entity, false);
+  playSound(entity, "fire.ignite", 0.2, 1.8);
+}
+
+function playFireWandReleaseSound(player, isCharged) {
+  if (isCharged) {
+    playSound(player, "random.explode", 0.45, 1.4);
+    return;
+  }
+
+  playSound(player, "fire.ignite", 0.35, 1.7);
+}
+
+function getWandTipLocation(player) {
+  const direction = normalizeVector(getViewDirection(player));
+  const eye = getEyeLocation(player);
+
+  return {
+    x: eye.x + direction.x * 0.85,
+    y: eye.y - 0.35 + direction.y * 0.35,
+    z: eye.z + direction.z * 0.85,
+  };
+}
+
+function isHoldingItem(player, typeId) {
+  const container = getInventory(player);
+  if (!container) return false;
+
+  const slot = player.selectedSlotIndex ?? 0;
+  const item = container.getItem(slot);
+  return item?.typeId === typeId;
 }
 
 function findFireBlastImpact(dimension, origin, direction) {
@@ -131,11 +280,7 @@ function findFireBlastImpact(dimension, origin, direction) {
 function spawnFireBlastTrail(dimension, origin, direction, range) {
   for (let distance = 1; distance <= range; distance += 2) {
     const location = addVector(origin, multiplyVector(direction, distance));
-    try {
-      dimension.spawnParticle("minecraft:basic_flame_particle", location);
-    } catch {
-      // Particles are cosmetic; the blast should still work if they are unavailable.
-    }
+    spawnParticle(dimension, "minecraft:basic_flame_particle", location);
   }
 }
 
@@ -224,7 +369,6 @@ function restoreZombieVillager(player) {
 
   const target = findTargetedZombieVillager(player);
   if (!target) {
-    player.sendMessage(`Aim at a zombie villager within ${RESTORATION_RANGE} blocks.`);
     return;
   }
 
@@ -238,10 +382,8 @@ function restoreZombieVillager(player) {
     if (nameTag) villager.nameTag = nameTag;
     removeEntity(target);
     spawnRestorationParticles(player.dimension, location);
-    player.sendMessage("Zombie villager restored.");
   } catch (error) {
     console.warn(`Failed to restore zombie villager: ${error}`);
-    player.sendMessage("Could not restore that zombie villager here.");
   }
 }
 
@@ -315,15 +457,12 @@ function removeEntity(entity) {
 
 function spawnRestorationParticles(dimension, location) {
   for (const particle of ["minecraft:villager_happy", "minecraft:totem_particle"]) {
-    try {
-      dimension.spawnParticle(particle, {
-        x: location.x,
-        y: location.y + 1,
-        z: location.z,
-      });
+    if (spawnParticle(dimension, particle, {
+      x: location.x,
+      y: location.y + 1,
+      z: location.z,
+    })) {
       return;
-    } catch {
-      // The cure should still happen when a cosmetic particle is unavailable.
     }
   }
 }
@@ -333,7 +472,6 @@ function toggleStorageContainer(player) {
 
   const held = getHeldStorageWand(player);
   if (!held) {
-    player.sendMessage("Hold the Storage Wand and use it again.");
     return;
   }
 
@@ -343,17 +481,12 @@ function toggleStorageContainer(player) {
   const existingEntity = findStorageEntity(tag);
 
   if (existingEntity && isStoragePresent(existingEntity, player)) {
-    if (dismissStorageEntity(existingEntity, player)) {
-      player.sendMessage(`Storage Chest Page ${page} dismissed.`);
-    } else {
-      player.sendMessage("Could not dismiss the storage container here.");
-    }
+    dismissStorageEntity(existingEntity, player);
     return;
   }
 
   const storageEntity = existingEntity ?? createStorageEntity(player, storageId, page);
   if (!storageEntity) {
-    player.sendMessage("Could not open the storage container here.");
     return;
   }
 
@@ -362,7 +495,6 @@ function toggleStorageContainer(player) {
   storageEntity.removeTag(STORAGE_DISMISSED_TAG);
   storageEntity.nameTag = `Storage Chest Page ${page}`;
   updateStorageWandLore(player, storageId);
-  player.sendMessage(`Storage Chest Page ${page} summoned. Tap it to use those 27 slots.`);
 }
 
 function getHeldStorageWand(player) {
@@ -531,6 +663,31 @@ function getBlockAtLocation(dimension, location) {
     });
   } catch {
     return undefined;
+  }
+}
+
+function spawnParticle(dimension, particle, location) {
+  try {
+    dimension.spawnParticle(particle, location);
+    return true;
+  } catch {
+    // Visual feedback is optional; wand behavior should continue without it.
+    return false;
+  }
+}
+
+function playSound(player, sound, volume = 0.4, pitch = 1) {
+  try {
+    player.playSound(sound, { volume, pitch });
+    return true;
+  } catch {
+    try {
+      player.dimension.playSound(sound, player.location, { volume, pitch });
+      return true;
+    } catch {
+      // Sound identifiers can vary by runtime; ignore unavailable cues.
+      return false;
+    }
   }
 }
 
