@@ -4,7 +4,7 @@ This Bedrock add-on adds craftable magic wands with utility and combat effects.
 
 ## How to use
 
-1. Import `PaVansWandCollection_1.0.4.mcaddon` from the GitHub release into Minecraft Bedrock.
+1. Import `PaVansWandCollection_1.0.5.mcaddon` from the GitHub release into Minecraft Bedrock.
 2. Activate both the behavior pack and resource pack on your world.
 3. Turn on Beta APIs / scripting experiments if your Minecraft version asks for them.
 4. Craft the wands at a crafting table, or run:
