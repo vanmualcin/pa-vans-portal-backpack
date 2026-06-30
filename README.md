@@ -4,7 +4,7 @@ This Bedrock add-on adds craftable magic wands with utility and combat effects.
 
 ## How to use
 
-1. Import `PaVansWandCollection_1.0.5.mcaddon` from the GitHub release into Minecraft Bedrock.
+1. Import `PaVansWandCollection_1.0.6.mcaddon` from the GitHub release into Minecraft Bedrock.
 2. Activate both the behavior pack and resource pack on your world.
 3. Turn on Beta APIs / scripting experiments if your Minecraft version asks for them.
 4. Craft the wands at a crafting table, or run:
@@ -25,7 +25,7 @@ Crafting uses lapis lazuli, redstone, and a stick.
 
 ### Fire Blast Wand
 
-Click the Fire Blast Wand to launch the current Ghast-like blast in the direction you are looking. Hold use, like drawing a bow, then release to launch a destructive blast that breaks blocks with a larger radius at full charge.
+Click the Fire Blast Wand to launch the current Ghast-like blast in the direction you are looking. Hold use, like drawing a bow, then release to launch a destructive blast that breaks blocks with a larger radius at full charge. While charging, the wand emits flame particles and sound cues, then flicks forward when released. Left-clicking a block or entity with the wand also plays the flick cue.
 
 Crafting uses a gold ingot, redstone, and a stick.
 
