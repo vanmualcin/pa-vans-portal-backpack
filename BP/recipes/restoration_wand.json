@@ -1,0 +1,42 @@
+{
+  "format_version": "1.20.10",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "pv:restoration_wand"
+    },
+    "tags": [
+      "crafting_table"
+    ],
+    "unlock": [
+      {
+        "item": "minecraft:golden_apple"
+      },
+      {
+        "item": "minecraft:fermented_spider_eye"
+      },
+      {
+        "item": "minecraft:stick"
+      }
+    ],
+    "pattern": [
+      " G ",
+      " F ",
+      " S "
+    ],
+    "key": {
+      "G": {
+        "item": "minecraft:golden_apple"
+      },
+      "F": {
+        "item": "minecraft:fermented_spider_eye"
+      },
+      "S": {
+        "item": "minecraft:stick"
+      }
+    },
+    "result": {
+      "item": "pv:restoration_wand",
+      "count": 1
+    }
+  }
+}
