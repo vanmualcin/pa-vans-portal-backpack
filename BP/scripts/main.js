@@ -2,6 +2,7 @@ import { system, world } from "@minecraft/server";
 
 const STORAGE_WAND_TYPE = "pv:storage_wand";
 const FIRE_WAND_TYPE = "pv:fire_wand";
+const ICE_WAND_TYPE = "pv:ice_wand";
 const RESTORATION_WAND_TYPE = "pv:restoration_wand";
 const STORAGE_ID_PROPERTY = "pv:storage_wand_id";
 const STORAGE_ENTITY = "pv:storage_container";
@@ -22,15 +23,30 @@ const FIRE_DESTRUCTIVE_MIN_RADIUS = 3;
 const FIRE_DESTRUCTIVE_MAX_RADIUS = 7;
 const FIRE_DESTRUCTIVE_COOLDOWN_TICKS = 60;
 const FIRE_CHARGE_FEEDBACK_INTERVAL_TICKS = 4;
+const ICE_FREEZE_RANGE = 28;
+const ICE_FREEZE_STEP = 0.75;
+const ICE_FREEZE_TARGET_RADIUS = 1.25;
+const ICE_FREEZE_WATER_RADIUS = 2;
+const ICE_FREEZE_COOLDOWN_TICKS = 30;
+const ICE_FREEZE_MIN_CHARGE_TICKS = 8;
+const ICE_FREEZE_MAX_CHARGE_TICKS = 24;
+const ICE_CHARGE_FEEDBACK_INTERVAL_TICKS = 4;
+const ICE_FREEZE_EFFECT_TICKS = 100;
 const RESTORATION_RANGE = 8;
 const RESTORATION_TARGET_RADIUS = 1.4;
 const RESTORATION_COOLDOWN_TICKS = 40;
 const canTrackFireWandCharge = Boolean(world.afterEvents.itemStartUse?.subscribe) &&
   Boolean(world.afterEvents.itemReleaseUse?.subscribe || world.afterEvents.itemStopUse?.subscribe);
+const canTrackIceWandCharge = Boolean(world.afterEvents.itemStartUse?.subscribe) &&
+  Boolean(world.afterEvents.itemReleaseUse?.subscribe || world.afterEvents.itemStopUse?.subscribe);
 const fireBlastCooldowns = new Map();
 const fireWandChargeStarts = new Map();
 const fireWandReleaseTicks = new Map();
 const fireWandFullChargeNotified = new Set();
+const iceWandCooldowns = new Map();
+const iceWandChargeStarts = new Map();
+const iceWandReleaseTicks = new Map();
+const iceWandFullChargeNotified = new Set();
 const restorationCooldowns = new Map();
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
@@ -38,6 +54,8 @@ world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
     system.run(() => toggleStorageContainer(source));
   } else if (itemStack?.typeId === FIRE_WAND_TYPE && !canTrackFireWandCharge) {
     system.run(() => fireBlast(source));
+  } else if (itemStack?.typeId === ICE_WAND_TYPE && !canTrackIceWandCharge) {
+    system.run(() => freezeTarget(source));
   } else if (itemStack?.typeId === RESTORATION_WAND_TYPE) {
     system.run(() => restoreZombieVillager(source));
   }
@@ -46,30 +64,45 @@ world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
 world.afterEvents.itemStartUse?.subscribe(({ source, itemStack }) => {
   if (itemStack?.typeId === FIRE_WAND_TYPE) {
     startFireWandCharge(source);
+  } else if (itemStack?.typeId === ICE_WAND_TYPE) {
+    startIceWandCharge(source);
   }
 });
 
 world.afterEvents.itemReleaseUse?.subscribe((event) => {
   if (event.itemStack?.typeId === FIRE_WAND_TYPE) {
     system.run(() => releaseFireWand(event));
+  } else if (event.itemStack?.typeId === ICE_WAND_TYPE) {
+    system.run(() => releaseIceWand(event));
   }
 });
 
 world.afterEvents.itemStopUse?.subscribe((event) => {
   if (event.itemStack?.typeId === FIRE_WAND_TYPE) {
     system.run(() => releaseFireWand(event));
+  } else if (event.itemStack?.typeId === ICE_WAND_TYPE) {
+    system.run(() => releaseIceWand(event));
   }
 });
 
 world.afterEvents.entityHitBlock?.subscribe((event) => {
-  system.run(() => flickHeldFireWand(event.damagingEntity ?? event.entity ?? event.source));
+  system.run(() => {
+    const entity = event.damagingEntity ?? event.entity ?? event.source;
+    flickHeldFireWand(entity);
+    flickHeldIceWand(entity);
+  });
 });
 
 world.afterEvents.entityHitEntity?.subscribe((event) => {
-  system.run(() => flickHeldFireWand(event.damagingEntity ?? event.entity ?? event.source));
+  system.run(() => {
+    const entity = event.damagingEntity ?? event.entity ?? event.source;
+    flickHeldFireWand(entity);
+    flickHeldIceWand(entity);
+  });
 });
 
 system.runInterval(updateFireWandChargeFeedback, FIRE_CHARGE_FEEDBACK_INTERVAL_TICKS);
+system.runInterval(updateIceWandChargeFeedback, ICE_CHARGE_FEEDBACK_INTERVAL_TICKS);
 
 function fireBlast(player) {
   if (!isEntityUsable(player)) return;
@@ -242,6 +275,307 @@ function playFireWandReleaseSound(player, isCharged) {
   }
 
   playSound(player, "fire.ignite", 0.35, 1.7);
+}
+
+function freezeTarget(player, charge = 0) {
+  if (!isEntityUsable(player)) return;
+
+  if (!tryUseCooldown(player, iceWandCooldowns, ICE_FREEZE_COOLDOWN_TICKS)) return;
+
+  const direction = normalizeVector(getViewDirection(player));
+  const origin = getEyeLocation(player);
+  const target = findIceWandTarget(player, origin, direction);
+  const impact = target?.location ?? addVector(origin, multiplyVector(direction, ICE_FREEZE_RANGE));
+  const range = Math.min(ICE_FREEZE_RANGE, distanceBetween(origin, impact));
+
+  spawnIceWandFlick(player, charge >= 1);
+  playIceWandReleaseSound(player, Boolean(target?.entity), charge);
+  spawnIceTrail(player.dimension, origin, direction, range);
+
+  if (target?.entity) {
+    freezeEntity(player, target.entity, charge);
+  }
+
+  const waterRadius = ICE_FREEZE_WATER_RADIUS + Math.floor(charge * 2);
+  freezeWaterNear(player.dimension, impact, waterRadius);
+  spawnIceImpactParticles(player.dimension, impact, charge);
+}
+
+function releaseIceWand(event) {
+  const player = event.source;
+  if (!isEntityUsable(player)) return;
+
+  const cooldownKey = getCooldownKey(player);
+  const currentTick = system.currentTick ?? 0;
+  if (iceWandReleaseTicks.get(cooldownKey) === currentTick) return;
+  iceWandReleaseTicks.set(cooldownKey, currentTick);
+
+  const heldTicks = getIceWandHeldTicks(event);
+  stopIceWandCharge(player);
+  freezeTarget(player, getIceWandCharge(heldTicks));
+}
+
+function getIceWandHeldTicks(event) {
+  const player = event.source;
+  const currentTick = system.currentTick ?? 0;
+  const startTick = iceWandChargeStarts.get(getCooldownKey(player));
+  if (typeof startTick === "number") return Math.max(0, currentTick - startTick);
+  if (typeof event.useDuration === "number") return event.useDuration;
+  return 0;
+}
+
+function startIceWandCharge(player) {
+  if (!isEntityUsable(player)) return;
+
+  const cooldownKey = getCooldownKey(player);
+  iceWandChargeStarts.set(cooldownKey, system.currentTick ?? 0);
+  iceWandFullChargeNotified.delete(cooldownKey);
+  playSound(player, "random.glass", 0.25, 1.6);
+}
+
+function stopIceWandCharge(player) {
+  const cooldownKey = getCooldownKey(player);
+  iceWandChargeStarts.delete(cooldownKey);
+  iceWandFullChargeNotified.delete(cooldownKey);
+}
+
+function updateIceWandChargeFeedback() {
+  const currentTick = system.currentTick ?? 0;
+
+  for (const player of world.getPlayers()) {
+    if (!isEntityUsable(player)) continue;
+
+    const cooldownKey = getCooldownKey(player);
+    const startTick = iceWandChargeStarts.get(cooldownKey);
+    if (typeof startTick !== "number") continue;
+
+    if (!isHoldingItem(player, ICE_WAND_TYPE)) {
+      stopIceWandCharge(player);
+      continue;
+    }
+
+    const heldTicks = Math.max(0, currentTick - startTick);
+    const charge = getIceWandCharge(heldTicks);
+    spawnIceWandChargeParticles(player, charge);
+
+    if (heldTicks >= ICE_FREEZE_MIN_CHARGE_TICKS && currentTick % 12 === 0) {
+      playSound(player, "random.glass", 0.08 + charge * 0.12, 1.2 + charge * 0.5);
+    }
+
+    if (charge >= 1 && !iceWandFullChargeNotified.has(cooldownKey)) {
+      iceWandFullChargeNotified.add(cooldownKey);
+      spawnIceWandFullChargeBurst(player);
+      playSound(player, "random.orb", 0.45, 1.9);
+    }
+  }
+}
+
+function getIceWandCharge(heldTicks) {
+  return Math.min(
+    1,
+    Math.max(
+      0,
+      (heldTicks - ICE_FREEZE_MIN_CHARGE_TICKS) /
+        (ICE_FREEZE_MAX_CHARGE_TICKS - ICE_FREEZE_MIN_CHARGE_TICKS),
+    ),
+  );
+}
+
+function findIceWandTarget(player, origin, direction) {
+  const entityTarget = findTargetedFreezableEntity(player, origin, direction);
+  let previousLocation = origin;
+
+  for (let distance = ICE_FREEZE_STEP; distance <= ICE_FREEZE_RANGE; distance += ICE_FREEZE_STEP) {
+    const location = addVector(origin, multiplyVector(direction, distance));
+
+    if (entityTarget && entityTarget.projection <= distance) {
+      return { entity: entityTarget.entity, location: entityTarget.location };
+    }
+
+    const block = getBlockAtLocation(player.dimension, location);
+    if (block && !block.isAir) {
+      if (isWaterBlock(block)) return { block, location };
+      if (!block.isLiquid) return { block, location: previousLocation };
+    }
+
+    previousLocation = location;
+  }
+
+  if (entityTarget) return { entity: entityTarget.entity, location: entityTarget.location };
+  return undefined;
+}
+
+function findTargetedFreezableEntity(player, origin, direction) {
+  const entities = player.dimension.getEntities({
+    location: origin,
+    maxDistance: ICE_FREEZE_RANGE,
+    excludeTypes: ["minecraft:player"],
+  });
+
+  let closest;
+  let closestProjection = ICE_FREEZE_RANGE + 1;
+
+  for (const entity of entities) {
+    if (!isFreezableEntity(player, entity)) continue;
+
+    const targetLocation = getEntityCenter(entity);
+    const offset = subtractVector(targetLocation, origin);
+    const projection = dotVector(offset, direction);
+    if (projection < 0 || projection > ICE_FREEZE_RANGE) continue;
+
+    const closestPoint = addVector(origin, multiplyVector(direction, projection));
+    const missDistance = distanceBetween(targetLocation, closestPoint);
+    if (missDistance > ICE_FREEZE_TARGET_RADIUS) continue;
+    if (!hasClearPath(player.dimension, origin, direction, projection)) continue;
+
+    if (projection < closestProjection) {
+      closest = { entity, location: targetLocation, projection };
+      closestProjection = projection;
+    }
+  }
+
+  return closest;
+}
+
+function isFreezableEntity(player, entity) {
+  if (!isEntityUsable(entity) || entity.id === player.id) return false;
+  if (entity.typeId === STORAGE_ENTITY) return false;
+  return hasHealth(entity);
+}
+
+function freezeEntity(player, entity, charge) {
+  const duration = Math.floor(ICE_FREEZE_EFFECT_TICKS + charge * 100);
+  const amplifier = charge >= 1 ? 8 : 5;
+
+  try {
+    entity.addEffect("slowness", duration, {
+      amplifier,
+      showParticles: true,
+    });
+  } catch {
+    // Some runtimes or entities may reject effects; water freezing still works.
+  }
+
+  try {
+    entity.applyDamage(1, {
+      damagingEntity: player,
+      cause: "freezing",
+    });
+  } catch {
+    // The freeze effect is the primary behavior; damage is only a light cue.
+  }
+}
+
+function freezeWaterNear(dimension, location, radius) {
+  const center = {
+    x: Math.floor(location.x),
+    y: Math.floor(location.y),
+    z: Math.floor(location.z),
+  };
+
+  for (let x = -radius; x <= radius; x++) {
+    for (let y = -1; y <= 1; y++) {
+      for (let z = -radius; z <= radius; z++) {
+        if (x * x + z * z > radius * radius) continue;
+
+        const block = getBlockAtLocation(dimension, {
+          x: center.x + x,
+          y: center.y + y,
+          z: center.z + z,
+        });
+        if (!block || !isWaterBlock(block)) continue;
+
+        try {
+          block.setType("minecraft:ice");
+        } catch {
+          // Some dimensions or water states may refuse replacement.
+        }
+      }
+    }
+  }
+}
+
+function isWaterBlock(block) {
+  return block?.typeId === "minecraft:water";
+}
+
+function spawnIceWandChargeParticles(player, charge) {
+  const location = getWandTipLocation(player);
+  const count = 1 + Math.floor(charge * 3);
+
+  for (let i = 0; i < count; i++) {
+    const offset = (i - count / 2) * 0.06;
+    spawnIceParticle(player.dimension, {
+      x: location.x + offset,
+      y: location.y + Math.random() * 0.12,
+      z: location.z - offset,
+    });
+  }
+}
+
+function spawnIceWandFullChargeBurst(player) {
+  const location = getWandTipLocation(player);
+
+  for (let i = 0; i < 10; i++) {
+    spawnIceParticle(player.dimension, {
+      x: location.x + (Math.random() - 0.5) * 0.6,
+      y: location.y + Math.random() * 0.5,
+      z: location.z + (Math.random() - 0.5) * 0.6,
+    });
+  }
+}
+
+function spawnIceWandFlick(player, isCharged) {
+  const direction = normalizeVector(getViewDirection(player));
+  const origin = getWandTipLocation(player);
+  const particleCount = isCharged ? 12 : 6;
+
+  for (let i = 0; i < particleCount; i++) {
+    const distance = 0.25 + i * 0.18;
+    spawnIceParticle(player.dimension, addVector(origin, multiplyVector(direction, distance)));
+  }
+}
+
+function flickHeldIceWand(entity) {
+  if (!isEntityUsable(entity) || !isHoldingItem(entity, ICE_WAND_TYPE)) return;
+
+  spawnIceWandFlick(entity, false);
+  playSound(entity, "random.glass", 0.18, 1.7);
+}
+
+function spawnIceTrail(dimension, origin, direction, range) {
+  for (let distance = 1; distance <= range; distance += 1.5) {
+    spawnIceParticle(dimension, addVector(origin, multiplyVector(direction, distance)));
+  }
+}
+
+function spawnIceImpactParticles(dimension, location, charge) {
+  const count = 8 + Math.floor(charge * 8);
+
+  for (let i = 0; i < count; i++) {
+    spawnIceParticle(dimension, {
+      x: location.x + (Math.random() - 0.5) * 0.8,
+      y: location.y + Math.random() * 0.8,
+      z: location.z + (Math.random() - 0.5) * 0.8,
+    });
+  }
+}
+
+function spawnIceParticle(dimension, location) {
+  return spawnFirstAvailableParticle(dimension, [
+    "minecraft:blue_flame_particle",
+    "minecraft:snowflake_particle",
+    "minecraft:basic_crit_particle",
+  ], location);
+}
+
+function playIceWandReleaseSound(player, hitEntity, charge) {
+  if (hitEntity) {
+    playSound(player, "random.glass", 0.45 + charge * 0.15, 1.4);
+    return;
+  }
+
+  playSound(player, "random.fizz", 0.28 + charge * 0.18, 1.8);
 }
 
 function getWandTipLocation(player) {
@@ -674,6 +1008,14 @@ function spawnParticle(dimension, particle, location) {
     // Visual feedback is optional; wand behavior should continue without it.
     return false;
   }
+}
+
+function spawnFirstAvailableParticle(dimension, particles, location) {
+  for (const particle of particles) {
+    if (spawnParticle(dimension, particle, location)) return true;
+  }
+
+  return false;
 }
 
 function playSound(player, sound, volume = 0.4, pitch = 1) {

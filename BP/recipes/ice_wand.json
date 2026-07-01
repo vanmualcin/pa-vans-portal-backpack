@@ -1,0 +1,42 @@
+{
+  "format_version": "1.20.10",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "pv:ice_wand"
+    },
+    "tags": [
+      "crafting_table"
+    ],
+    "unlock": [
+      {
+        "item": "minecraft:packed_ice"
+      },
+      {
+        "item": "minecraft:lapis_lazuli"
+      },
+      {
+        "item": "minecraft:stick"
+      }
+    ],
+    "pattern": [
+      " I ",
+      " L ",
+      " S "
+    ],
+    "key": {
+      "I": {
+        "item": "minecraft:packed_ice"
+      },
+      "L": {
+        "item": "minecraft:lapis_lazuli"
+      },
+      "S": {
+        "item": "minecraft:stick"
+      }
+    },
+    "result": {
+      "item": "pv:ice_wand",
+      "count": 1
+    }
+  }
+}

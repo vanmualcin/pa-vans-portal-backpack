@@ -4,7 +4,7 @@ This Bedrock add-on adds craftable magic wands with utility and combat effects.
 
 ## How to use
 
-1. Import `PaVansWandCollection_1.0.6.mcaddon` from the GitHub release into Minecraft Bedrock.
+1. Import `PaVansWandCollection_1.0.7.mcaddon` from the GitHub release into Minecraft Bedrock.
 2. Activate both the behavior pack and resource pack on your world.
 3. Turn on Beta APIs / scripting experiments if your Minecraft version asks for them.
 4. Craft the wands at a crafting table, or run:
@@ -12,6 +12,7 @@ This Bedrock add-on adds craftable magic wands with utility and combat effects.
    ```mcfunction
    /give @s pv:storage_wand
    /give @s pv:fire_wand
+   /give @s pv:ice_wand
    /give @s pv:restoration_wand
    ```
 
@@ -29,6 +30,12 @@ Click the Fire Blast Wand to launch the current Ghast-like blast in the directio
 
 Crafting uses a gold ingot, redstone, and a stick.
 
+### Ice Wand
+
+Aim and release the Ice Wand to freeze water into ice and slow targeted mobs. Hold use briefly to build a stronger frost burst with more blue/snow particles and a wider water-freezing area.
+
+Crafting uses packed ice, lapis lazuli, and a stick.
+
 ### Restoration Wand
 
 Use the Restoration Wand while aiming at a zombie villager within 8 blocks to instantly cure it into a villager.
@@ -41,4 +48,5 @@ Crafting uses an emerald, gold ingot, and a stick.
 - The Storage Wand moves your matching storage chest out of sight instead of destroying it, so the stored items are not intentionally deleted.
 - Dismissing only affects the chest tied to your wand and selected page.
 - The Fire Blast Wand's click blast damages non-player entities without intentionally breaking blocks. Its charged blast is destructive.
+- The Ice Wand freezes nearby targeted water blocks into ice and applies a strong slowness effect to targeted mobs.
 - The Restoration Wand needs a clear line of sight to the zombie villager.
